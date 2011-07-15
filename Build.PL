@@ -20,7 +20,7 @@ my %module_build_args = (
     'Randy Stauner <rwstauner@cpan.org>'
   ],
   'dist_name' => 'Sub-Chain-Group',
-  'dist_version' => '0.010011',
+  'dist_version' => '0.012',
   'license' => 'perl',
   'module_name' => 'Sub::Chain::Group',
   'recommends' => {},

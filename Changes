@@ -1,28 +1,10 @@
-Revision History for Sub-Chain-Group
-====================================
+Revision history for Sub::Chain::Group
 
-0.010011
---------
+0.012     2011-07-15T00:19:37Z
 
-74d269d Add TODO Section (but just link to Sub::Chain/TODO)
+  - Documentation fixes
+  - Superficial dist/release changes
 
-7338c58 Move Test::Warn suggested test prereq to correct dist.ini
+0.010011  2011-01-07T06:15:22Z
 
-7d17982 Reorganize subs for consistency
-
-0530074 Format the call() input => output documentation in a list for clarity
-
-6d3db6c Add example usage code to groups() documentation
-
-02f4812 Spell out 'or' instead of using a slash
-
-a065a0e Fix module name typo in Pod example
-
-v0.10 2011-01-04
-----------------
-
-0609e32 Move Sub::Chain::Group to a separate distribution
-
-===================================
-End of changes in the last 365 days
-===================================
+  - Initial release

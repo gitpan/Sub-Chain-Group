@@ -2,9 +2,9 @@
 use strict;
 use warnings;
 
-BEGIN { require 5.006; }
+use 5.006;
 
-use ExtUtils::MakeMaker 6.31;
+use ExtUtils::MakeMaker 6.30;
 
 
 
@@ -14,11 +14,11 @@ my %WriteMakefileArgs = (
   'BUILD_REQUIRES' => {
     'File::Find' => '0',
     'File::Temp' => '0',
-    'ExtUtils::MakeMaker' => '6.31',
+    'ExtUtils::MakeMaker' => '6.30',
     'Test::More' => '0.96'
   },
   'CONFIGURE_REQUIRES' => {
-    'ExtUtils::MakeMaker' => '6.31'
+    'ExtUtils::MakeMaker' => '6.30'
   },
   'DISTNAME' => 'Sub-Chain-Group',
   'EXE_FILES' => [],
@@ -30,7 +30,7 @@ my %WriteMakefileArgs = (
     'Set::DynamicGroups' => '0',
     'Sub::Chain' => '0'
   },
-  'VERSION' => '0.010011',
+  'VERSION' => '0.012',
   'test' => {
     'TESTS' => 't/*.t'
   }

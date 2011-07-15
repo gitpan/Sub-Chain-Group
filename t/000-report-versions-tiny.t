@@ -56,6 +56,7 @@ eval { $v .= pmver('Object::Enum','0.072') };
 eval { $v .= pmver('Set::DynamicGroups','any version') };
 eval { $v .= pmver('Sub::Chain','any version') };
 eval { $v .= pmver('Test::More','0.96') };
+eval { $v .= pmver('Test::Synopsis','0.06') };
 eval { $v .= pmver('Test::Warn','0.21') };
 
 
