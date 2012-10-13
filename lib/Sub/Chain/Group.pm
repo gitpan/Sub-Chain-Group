@@ -11,9 +11,11 @@ use strict;
 use warnings;
 
 package Sub::Chain::Group;
-BEGIN {
-  $Sub::Chain::Group::VERSION = '0.012';
+{
+  $Sub::Chain::Group::VERSION = '0.013';
 }
+# git description: v0.012-8-ge16d2b1
+
 BEGIN {
   $Sub::Chain::Group::AUTHORITY = 'cpan:RWSTAUNER';
 }
@@ -23,16 +25,13 @@ use Carp qw(croak carp);
 
 # this seems a little dirty, but it's not appropriate to put it in Sub::Chain
 use Sub::Chain;
+{
+  no warnings 'once';
 push(@Sub::Chain::CARP_NOT, __PACKAGE__);
+}
 
-use Object::Enum 0.072 ();
 use Set::DynamicGroups ();
-use Sub::Chain ();
-
-our %Enums = (
-  warn_no_field => Object::Enum->new({unset => 0, default => 'single',
-    values => [qw(never single always)]}),
-);
+use Module::Load ();
 
 
 sub new {
@@ -45,15 +44,23 @@ sub new {
     fields => {},
     groups => Set::DynamicGroups->new(),
     queue  => [],
+    hooks  => {},
+    hook_as_hash  => delete $opts{hook_as_hash},
+    warn_no_field => 'single',
   };
-  while( my ($name, $enum) = each %Enums ){
-    $self->{$name} = $enum->clone(
-      exists $opts{$name} ? delete $opts{$name} : ()
-    );
-  };
-  # remove any other characters
-  $self->{chain_class} =~ s/[^:a-zA-Z0-9_]+//g;
-  eval "require $self->{chain_class}";
+
+  foreach my $enum (
+    [warn_no_field => qw(never single always)],
+  ){
+    my ($key, @vals) = @$enum;
+    if( my $val = delete $opts{ $key } ){
+      croak qq['$key' cannot be set to '$val'; must be one of: ] . join(', ', @vals)
+        unless grep { $val eq $_ } @vals;
+      $self->{ $key } = $val;
+    }
+  }
+
+  Module::Load::load($self->{chain_class});
 
   # TODO: warn about remaining unused options?
 
@@ -82,27 +89,59 @@ sub call {
   my $opts = {multi => 1};
   my $ref = ref $_[0];
 
+  my ($before, $after) = @{ $self->{hooks} }{qw( before after )};
+
   if( $ref eq 'HASH' ){
-    my %in = %{$_[0]};
+    my $in = { %{ $_[0] } };
+    $in = $before->call($in)  if $before;
     $out = {};
-    while( my ($key, $value) = each %in ){
+    while( my ($key, $value) = each %$in ){
       $out->{$key} = $self->_call_one($key, $value, $opts);
     }
+    $out = $after->call($out) if $after;
   }
   elsif( $ref eq 'ARRAY' ){
-    my @fields = @{$_[0]};
-    my @data   = @{$_[1]};
+    my $fields = [ @{ $_[0] } ];
+    my $values = [ @{ $_[1] } ];
+    $values = $self->_call_hook($before, $values, $fields) if $before;
     $out = [];
-    foreach my $i ( 0 .. $#fields ){
+    foreach my $i ( 0 .. @$fields - 1 ){
       CORE::push(@$out,
-        $self->_call_one($fields[$i], $data[$i], $opts));
+        $self->_call_one($fields->[$i], $values->[$i], $opts));
     }
+    $out = $self->_call_hook($after, $out, $fields) if $after;
   }
   else {
-    $out = $self->_call_one($_[0], $_[1]);
+    my ($key, $val) = @_;
+    $val = $self->_call_hook($before, $val, $key) if $before;
+    $out = $self->_call_one($key, $val);
+    $out = $self->_call_hook($after,  $out, $key) if $after;
   }
 
   return $out;
+}
+
+sub _call_hook {
+  my ($self, $chain, $values, $fields) = @_;
+
+  if( $self->{hook_as_hash} ){
+    if( ref($fields) eq 'ARRAY' ){
+      my $hash = {};
+      @$hash{ @$fields } = @$values;
+      $hash = $chain->call($hash);
+      $values = [ @$hash{ @$fields } ];
+    }
+    else {
+      my $hash = { $fields => $values };
+      $hash = $chain->call($hash);
+      $values = $hash->{ $fields };
+    }
+  }
+  else {
+    $values = $chain->call($values, $fields);
+  }
+
+  return $values;
 }
 
 sub _call_one {
@@ -125,8 +164,8 @@ sub chain {
   }
 
   carp("No subs chained for '$name'")
-    if ($self->{warn_no_field}->is_always)
-      || ($self->{warn_no_field}->is_single && !$opts->{multi});
+    if $self->{warn_no_field} eq 'always'
+      || ($self->{warn_no_field} eq 'single' && !$opts->{multi});
 
   return;
 }
@@ -144,6 +183,12 @@ sub dequeue {
     CORE::push(@$dequeued, $item);
 
     my ($sub, $opts) = @$item;
+    my @chain_args = ($sub, @$opts{qw(args opts)});
+
+    foreach my $hook ( @{ $opts->{hooks} || [] } ){
+      ($self->{hooks}->{ $hook } ||= $self->new_sub_chain())
+        ->append(@chain_args);
+    }
 
     my $fields = $opts->{fields} || [];
     # keep fields unique
@@ -155,11 +200,9 @@ sub dequeue {
       );
     }
 
-    # create a single instance of the sub
-    # and copy its reference to the various stacks
     foreach my $field ( @$fields ){
       ($self->{fields}->{$field} ||= $self->new_sub_chain())
-        ->append($sub, @$opts{qw(args opts)});
+        ->append(@chain_args);
     }
   }
   # let 'queue' return false so we can do simple 'if queue' checks
@@ -215,7 +258,9 @@ sub _normalize_spec {
     options   => 'opts',
     field     => 'fields',
     group     => 'groups',
+    hook      => 'hooks',
   );
+
   while( my ($alias, $name) = each %aliases ){
     # store the alias in the actual key
     # overwrite with actual key if specified
@@ -226,7 +271,7 @@ sub _normalize_spec {
   }
 
   # allow a single string and convert it to an arrayref
-  foreach my $type ( qw(fields groups) ){
+  foreach my $type ( qw(fields groups hooks) ){
     $norm{$type} = [$norm{$type}]
       if exists($norm{$type}) && !ref($norm{$type});
   }
@@ -246,6 +291,7 @@ sub reprocess_queue {
   # reset the queue and the stacks so that it will all be rebuilt
   $self->{queue}  = [@$dequeued, @{ $self->{queue} || [] } ];
   $self->{fields} = {};
+  $self->{hooks}  = {};
   # but don't actually rebuild it until necessary
 }
 
@@ -253,12 +299,15 @@ sub reprocess_queue {
 
 # NOTE: Synopsis tested in t/synopsis.t
 
-
 __END__
+
 =pod
 
-=for :stopwords Randy Stauner TODO cpan testmatrix url annocpan anno bugtracker rt cpants
-kwalitee diff irc mailto metadata placeholders
+=encoding utf-8
+
+=for :stopwords Randy Stauner ACKNOWLEDGEMENTS TODO cpan testmatrix url annocpan anno
+bugtracker rt cpants kwalitee diff irc mailto metadata placeholders
+metacpan
 
 =head1 NAME
 
@@ -266,7 +315,7 @@ Sub::Chain::Group - Group chains of subs by field name
 
 =head1 VERSION
 
-version 0.012
+version 0.013
 
 =head1 SYNOPSIS
 
@@ -339,6 +388,17 @@ if you're using L<Sub::Chain::Named>.
 
 =item *
 
+C<hook_as_hash>
+
+Normally hooks are called with the data structures
+passed in (hash refs, array refs, or strings).
+If this option is enabled (set to a true value)
+hooks will be called with a hashref instead (derived from the input data)
+to enable simpler more consistent hook functions.
+See L</HOOKS> for more information.
+
+=item *
+
 C<warn_no_field>
 
 Whether or not to emit a warning if asked to call a sub chain on a field
@@ -386,13 +446,20 @@ Possible options:
 
 C<fields> (or C<field>)
 
-An arrayref of field names
+Field name(s) (string or array ref)
 
 =item *
 
 C<groups> (or C<group>)
 
-An arrayref of group names
+Group name(s) (string or array ref)
+
+=item *
+
+C<hooks> (or C<hook>)
+
+Valid values: C<before>, C<after> (string or array ref)
+See L</HOOKS> for explanation.
 
 =item *
 
@@ -409,9 +476,6 @@ A hashref of options for the sub
 (see L<Sub::Chain/OPTIONS>)
 
 =back
-
-If a single string is provided for C<fields> or C<groups>
-it will be converted to an arrayref.
 
 =head2 call
 
@@ -539,6 +603,69 @@ to be completely reprocessed.
 This gets called automatically when groups are changed
 after the queue was initially processed.
 
+=head1 HOOKS
+
+In addition to building sub chains for specific fields (or groups)
+there are also hooks available to process the input as a whole
+(the hash ref or array refs passed to L</call>).
+
+Specify C<< hook => 'before' >> (or C<< hook => 'after' >>)
+when calling L</append> (instead of specifying C<fields> or C<groups>)
+and the provided sub will be appended to a chain that will be able to
+modify the input record as a whole before (or after)
+the sub chains are called for each field.
+
+These can modify the input by updating (or even adding new) fields:
+
+  sub debug_hash {
+    my $h = shift;
+    $h->{debug} = join ':', keys %$h;
+    return $h;
+  }
+
+  $chain->append(\&debug_hash, hook => 'before');
+
+The sub should return the (modified) data structure
+for consistency with other chained subs.
+
+When passing a hash ref to L</call>
+the hash ref will be passed to the hook (as shown above).
+
+If two array refs are passed to L</call>
+the array ref of values will be passed to the hook as the first argument
+and the array ref of keys will be passed as the second argument.
+This is consistent with all other chained subs that receive their value
+as the first argument.
+
+  $chain->call([qw(a b c), [1, 2, 3]);
+  # sub will receive: ([1, 2, 3], [qw(a b c)])
+  # and should return an array ref of (possibly modified) values
+
+You can also set C<< hook_as_hash => 1 >> in the constructor
+which will use the two input arrays to build a hash ref,
+pass the hash ref to any hook subs
+(which should return a hash ref),
+and in the end return an array ref of the fields of that hash ref
+preserving the order of the original array ref.
+This can be simpler to work with in the sub
+(and enable using the same sub regardless of the input type).
+
+  $chain->call([qw(a b c)], [1, 2, 3]);
+  # sub will receive: ({a => 1, b => 2, c => 3})
+  # and should return a (possibly modified) hash ref.
+
+If a simple string key is passed to L</call>
+the hooks will be called with the value as the first argument
+and the field name as the second (similar to the way array refs are handled).
+The C<hook_as_hash> option will also work here;
+A hashref will be passed to the hooks
+and ultimately return the single value.
+
+B<Note>:
+A shallow clone is performed on the ref(s) (but not a deep clone)
+so it's up to you to determine if modifying the structures in the hooks
+is acceptable or if you need to do a deep clone.
+
 =head1 TODO
 
 See L<Sub::Chain/TODO>.
@@ -635,9 +762,9 @@ progress on the request by the system.
 =head2 Source Code
 
 
-L<http://github.com/rwstauner/Sub-Chain-Group>
+L<https://github.com/rwstauner/Sub-Chain-Group>
 
-  git clone http://github.com/rwstauner/Sub-Chain-Group
+  git clone https://github.com/rwstauner/Sub-Chain-Group.git
 
 =head1 AUTHOR
 
@@ -651,4 +778,3 @@ This is free software; you can redistribute it and/or modify it under
 the same terms as the Perl 5 programming language system itself.
 
 =cut
-

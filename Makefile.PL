@@ -9,30 +9,34 @@ use ExtUtils::MakeMaker 6.30;
 
 
 my %WriteMakefileArgs = (
-  'ABSTRACT' => 'Group chains of subs by field name',
-  'AUTHOR' => 'Randy Stauner <rwstauner@cpan.org>',
-  'BUILD_REQUIRES' => {
-    'File::Find' => '0',
-    'File::Temp' => '0',
-    'ExtUtils::MakeMaker' => '6.30',
-    'Test::More' => '0.96'
+  "ABSTRACT" => "Group chains of subs by field name",
+  "AUTHOR" => "Randy Stauner <rwstauner\@cpan.org>",
+  "BUILD_REQUIRES" => {
+    "ExtUtils::MakeMaker" => 0,
+    "File::Find" => 0,
+    "File::Spec::Functions" => 0,
+    "File::Temp" => 0,
+    "List::Util" => 0,
+    "Test::More" => "0.88"
   },
-  'CONFIGURE_REQUIRES' => {
-    'ExtUtils::MakeMaker' => '6.30'
+  "CONFIGURE_REQUIRES" => {
+    "ExtUtils::MakeMaker" => "6.30"
   },
-  'DISTNAME' => 'Sub-Chain-Group',
-  'EXE_FILES' => [],
-  'LICENSE' => 'perl',
-  'NAME' => 'Sub::Chain::Group',
-  'PREREQ_PM' => {
-    'Carp' => '0',
-    'Object::Enum' => '0.072',
-    'Set::DynamicGroups' => '0',
-    'Sub::Chain' => '0'
+  "DISTNAME" => "Sub-Chain-Group",
+  "EXE_FILES" => [],
+  "LICENSE" => "perl",
+  "NAME" => "Sub::Chain::Group",
+  "PREREQ_PM" => {
+    "Carp" => 0,
+    "Module::Load" => 0,
+    "Set::DynamicGroups" => 0,
+    "Sub::Chain" => 0,
+    "strict" => 0,
+    "warnings" => 0
   },
-  'VERSION' => '0.012',
-  'test' => {
-    'TESTS' => 't/*.t'
+  "VERSION" => "0.013",
+  "test" => {
+    "TESTS" => "t/*.t"
   }
 );
 
